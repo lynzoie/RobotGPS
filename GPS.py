@@ -1,9 +1,6 @@
 import numpy as np
 import os
 
-#from DAQ import Ports
-#from DAQ.Observe import Observe
-#from pycreate2 import Create2
 from ViveServer.Client import Client
 from Motion import Motion
 
@@ -51,21 +48,22 @@ class GPS(object):
         self.x = self.Cx - (r*np.cos(self.theta))        
         self.y = self.Cy - (r*np.sin(self.theta))
     
-    def travel(self, robot, new_x, new_y):
+    def travel(self, robot, new_x:'x-coordinate in m', new_y:'y-coordinate in m'):
+        # Convert desired xy from m to mm
+        new_x = new_x * 1000
+        new_y = new_y * 1000
 
         # Calculate distance and angle robot should turn to get to target
         p1 = np.array((self.x,self.y))
         p2 = np.array((new_x,new_y))
-
         dist = np.linalg.norm(p1 - p2)
         
         # Rotate to face destination
         phi = np.degrees(np.arctan2(p2[1]-p1[1],p2[0]-p1[0]))
         turn_angle = phi
-
         move_robot = Motion.RobotTranslator(robot)
         move_robot.turn(a=turn_angle,bot=robot)     # pass angle as degrees
 
         # Start moving to destination
-        # while self.x != new_x and self.y != new_y
         move_robot.move(d=dist/2,bot=robot)
+        
