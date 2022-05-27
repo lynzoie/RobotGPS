@@ -85,7 +85,7 @@ class GPS(object):
         move_robot.turn(a=turn_angle,bot=robot,smooth_stop=False)     # pass angle as degrees
 
 
-    def travel(self, robot, c, new_x:'x-coordinate in m', new_y:'y-coordinate in m'):
+    def travel(self, robot, c, new_x:'x-coordinate in m', new_y:'y-coordinate in m', new_ang:'final angle (in degrees), range: -180<x<+180'):
         # Get inital coordinates in mm
         self.get_robot_pose(c)
         conv_x = self.x * 1000
@@ -98,7 +98,6 @@ class GPS(object):
         print('Desired x and y: ', new_x,new_y)
 
         move_robot = Motion.RobotTranslator(robot)
-        new_ang = -178              # example ending pose, -180 < 0 < +180
 
         # rotate to face destination
         self.rot_to_pose(new_ang, robot, move_robot)     
