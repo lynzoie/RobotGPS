@@ -9,15 +9,15 @@ b_arr = []
 
 class GPS(object):
     def __init__(self):
-        self.x = 0          # x center of robot
-        self.y = 0          # y center of robot
-        self.theta = 0      # angle of robot in degrees
+        self.x = 0          # x center of robot in m
+        self.y = 0          # y center of robot in m
+        self.theta = 0      # angle of robot in degrees, -180 < self.theta < +180
         
         self.v = 0          # linear velocity, optional attribute
         self.w = 0          # angular velocity, opitional attribute
 
-        self.Cx = 0         # x center between the two wheels, optional attribute
-        self.Cy = 0         # y center between the two wheels, optional attribute
+        self.Cx = 0         # x center between the two wheels in m, optional attribute
+        self.Cy = 0         # y center between the two wheels in m, optional attribute
 
 
     def calc_theta(self, Ax, Ay, Bx, By):
@@ -69,12 +69,20 @@ class GPS(object):
                 f.write("%s\n" % item)
 
 
-    def rot_to_dest(self,cur_x,cur_y,new_x,new_y, robot, move_robot):
+    def rot_to_pose(self, phi, robot, move_robot):
         # Rotate to face destination
-        phi = np.degrees(np.arctan2(new_y-cur_y , new_x-cur_x))
+        conv_theta = np.where(self.theta < 0, 360+self.theta, self.theta)       # convert negative angles to range 0<theta<360
+        conv_phi = phi if phi > 0 else 360+phi                                  # convert negative angles to range 0<phi<360
+
+        turn_angle = conv_theta - conv_phi
+
+        # turn angle<0 turns CCW and vice versa
+        if (turn_angle > 180):
+            turn_angle -= 360
+        elif (turn_angle < -180):
+            turn_angle += 360
         
-        alpha = phi - self.theta               # TODO: fix alpha so we face destination. Consider logic of alpha<0 turns CCW and vice versa
-        # move_robot.turn(a=alpha,bot=robot)     # pass angle as degrees
+        move_robot.turn(a=turn_angle,bot=robot,smooth_stop=False)     # pass angle as degrees
 
 
     def travel(self, robot, c, new_x:'x-coordinate in m', new_y:'y-coordinate in m'):
@@ -90,10 +98,14 @@ class GPS(object):
         print('Desired x and y: ', new_x,new_y)
 
         move_robot = Motion.RobotTranslator(robot)
-        
+        new_ang = -178              # example ending pose, -180 < 0 < +180
+
         # rotate to face destination
-        self.rot_to_dest(conv_x,conv_y,new_x,new_y,robot,move_robot)     
+        self.rot_to_pose(new_ang, robot, move_robot)     
         self.get_robot_pose(c)
+
+        # write gps data to text file
+        self.output_gps_coords()
 
 
         
