@@ -81,7 +81,10 @@ class GPS(object):
             turn_angle -= 360
         elif (turn_angle < -180):
             turn_angle += 360
-        
+        else:
+            turn_angle = -turn_angle
+
+        print("Turn angle: ", turn_angle)
         move_robot.turn(a=turn_angle,bot=robot,smooth_stop=False)     # pass angle as degrees
 
 
@@ -91,15 +94,18 @@ class GPS(object):
         conv_x = self.x * 1000
         conv_y = self.y * 1000
         print('Conv self.x and self.y: ', conv_x,conv_y)
+        print("Current angle: ", self.theta)        
         
         # Convert desired xy from m to mm
         new_x = new_x * 1000
         new_y = new_y * 1000
+        print(' ')
         print('Desired x and y: ', new_x,new_y)
-
+        print("Desired new angle: ", new_ang)
+        print(' ')
         move_robot = Motion.RobotTranslator(robot)
 
-        # rotate to face destination
+        # rotate to final pose angle
         self.rot_to_pose(new_ang, robot, move_robot)     
         self.get_robot_pose(c)
 
