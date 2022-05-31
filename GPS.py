@@ -48,8 +48,8 @@ class GPS(object):
 
         r = 0.05        # assuming the center of the robot is exactly 50mm from the wheel axis
         # offset to circle at center Cx,Cy
-        self.x = self.Cx - (r*np.cos(self.theta))        
-        self.y = self.Cy - (r*np.sin(self.theta))
+        self.x = self.Cx - (r*np.cos(np.degrees(self.theta)))
+        self.y = self.Cy - (r*np.sin(np.degrees(self.theta)))
 
 
     def get_robot_pose(self,c):
