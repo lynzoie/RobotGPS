@@ -68,8 +68,7 @@ class GPS(object):
             for item in out_arr:
                 f.write("%s\n" % item)
 
-
-    def rot_to_pose(self, phi, robot, move_robot):
+    def rot_to_angle(self, phi, robot, move_robot):
         # Rotate to face destination
         conv_theta = np.where(self.theta < 0, 360+self.theta, self.theta)       # convert negative angles to range 0<theta<360
         conv_phi = phi if phi > 0 else 360+phi                                  # convert negative angles to range 0<phi<360
@@ -106,8 +105,10 @@ class GPS(object):
         move_robot = Motion.RobotTranslator(robot)
 
         # rotate to final pose angle
-        self.rot_to_pose(new_ang, robot, move_robot)     
-        self.get_robot_pose(c)
+        while (abs(self.theta-new_ang)>1):     # feedback system to fix angle
+            self.rot_to_angle(new_ang, robot, move_robot)    
+            self.get_robot_pose(c)
+            print("Actual theta: ", self.theta) 
 
         # write gps data to text file
         self.output_gps_coords()
