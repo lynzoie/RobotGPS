@@ -134,10 +134,7 @@ class GPS(object):
         # 2. Second, have the robot start moving forward to destination (move towards minimum distance between the two points)
         # 3. Check if we're at destination, else restart steps 1 and 2
         # 4. Once at destination (or close enough), rotate robot to final angle
-
-        # Initial conditions for conv_x/conv_y to execute while loop
-        conv_x = 9999
-        conv_y = 9999
+        
         print("Moving to target location: (" , new_x , "," , new_y , ") with final angle: ", new_ang)
         
         # 3. repeat steps 1 and 2 if needed
