@@ -57,7 +57,6 @@ class GPS(object):
         b = list(gps['tracker_2'])
         a_arr.append(a[0:3])
         b_arr.append(b[0:3])
-
         self.tracker_to_xytheta(a[0],a[2],b[0],b[2])   # grab current pose of robot
 
     #### Calculate correct turn angle to face desired phi ####
@@ -65,7 +64,6 @@ class GPS(object):
         # Rotate to face destination
         conv_theta = np.where(self.theta >= 0, self.theta, 360+self.theta)       # convert negative angles to range 0<theta<360
         conv_phi = phi if phi >= 0 else 360+phi                                  # convert negative angles to range 0<phi<360
-
         turn_angle = conv_theta - conv_phi
 
         # turn angle<0 turns CCW and vice versa
@@ -96,27 +94,16 @@ class GPS(object):
     def move_to_dest(self, d, v=100, w=0, robot=None, c=None):          
         self.v = v  # in mm/sec
         self.w = w  # in ang/sec
-
-        state_robot = Motion.State(state=[self.x, self.y, self.theta, self.v, self.w])
-
         t = d/v     # time it takes to move d mm with v mm/sec
-        cnt = 0     # count how many iterations the while loop executes
-        dist = 0    # shortest distance between the starting point of the left wheel to now 
+        
         wheelbase = 235
         vL = v - (wheelbase/2)*np.radians(w)
         vR = v + (wheelbase/2)*np.radians(w)
 
         start = time.monotonic()        
-        # while (time.monotonic() < start + t and dist < (d/1000)):
         while (time.monotonic() < start + t):
             robot.drive_direct(int(np.round(vL)) ,int(np.round(vR)))
             self.get_robot_pose(c)
-            if cnt == 0:
-                p1 = np.array((a_arr[0][0],a_arr[0][2]))
-
-            p2 = np.array((a_arr[-1][0],a_arr[-1][2]))
-            cnt += 1
-            dist = np.linalg.norm(p2-p1)
 
         robot.drive_direct(0,0)
 
@@ -133,13 +120,13 @@ class GPS(object):
         # 1. First, have robot face destination
         # 2. Second, have the robot start moving forward to destination (move towards minimum distance between the two points)
         # 3. Check if we're at destination, else restart steps 1 and 2
-        # 4. Once at destination (or close enough), rotate robot to final angle
+        # 4. Once at destination (or close enough within threshold), rotate robot to final angle
         
         print("Moving to target location: (" , new_x , "," , new_y , ") with final angle: ", new_ang)
         
         # 3. repeat steps 1 and 2 if needed
-        threshold = 20      # difference between desired coordinate and measured coordinate that is acceptable
-        while (abs(new_x - (self.x*1000)) > threshold or abs(new_y - (self.y*1000)) > threshold):
+        threshold = 15      # difference between desired coordinate and measured coordinate that is acceptable
+        while (abs(new_x - (self.x*1000)) >= threshold or abs(new_y - (self.y*1000)) >= threshold):
             # Get current robot's coordinates in mm
             self.get_robot_pose(c)
             conv_x = self.x * 1000
@@ -152,7 +139,6 @@ class GPS(object):
             self.turn_to_angle(c, dest_ang, robot, move_robot)
 
             # 2. move to destination
-            time.sleep(2)
             print("Moving towards destination... \n")
             dist = np.linalg.norm(p2-p1)
             self.move_to_dest(d=dist, robot=robot, c=c)
@@ -161,7 +147,6 @@ class GPS(object):
             print("Distance traveled: ", dist, "\n")
 
         # 4. rotate to final angle at destination
-        time.sleep(2)
         print("Rotate at destination...")
         self.turn_to_angle(c, new_ang, robot, move_robot)
 
