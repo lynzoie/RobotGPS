@@ -8,24 +8,27 @@ from Motion import Motion
 a_arr = []
 b_arr = []
 
+
+
 class GPS(object):
     def __init__(self):
         self.x = 0          # x center of robot in m
         self.y = 0          # y center of robot in m
         self.theta = 0      # angle from x-axis that robot is facing in degrees, -180 < self.theta < +180
         
-        self.v = 0          # linear velocity, optional attribute
-        self.w = 0          # angular velocity, opitional attribute
+        self.v = 0          # linear velocity in mm/sec, optional attribute
+        self.w = 0          # angular velocity in rad/s, opitional attribute
 
         self.Cx = 0         # x center between the two wheels in m, optional attribute
         self.Cy = 0         # y center between the two wheels in m, optional attribute
 
-    #### Write gps coordinates to file ####
-    def output_gps_coords(self):
-        out_arr = np.vstack((a_arr,b_arr))
-        with open('test_navrobot.txt','w') as f:
-            for item in out_arr:
+
+    #### Write arr to filename ####
+    def output_arr(self, array, filename="test_navrobot.txt"):
+        with open(filename,'w') as f:
+            for item in array:
                 f.write("%s\n" % item)
+
 
     #### Calculate angle that robot is facing ####
     def calc_theta(self, Ax, Ay, Bx, By):
@@ -50,6 +53,35 @@ class GPS(object):
         self.x = self.Cx - (r*np.cos(np.radians(self.theta)))
         self.y = self.Cy - (r*np.sin(np.radians(self.theta)))
 
+
+    # #### Find reference axes and angle ####
+    # def ref_axes(self, c):
+    #     gps = c.get_trackers_coordinates()
+    #     c = list(gps['tracker_3'])
+    #     d = list(gps['tracker_4'])
+    #     x1, y1 = c[0], c[2]
+    #     x2, y2 = d[0], d[2]
+    #     Cy = (y2 - y1)/2 + y1
+    #     Cx = (x2 - x1)/2 + x1
+
+    #     r = np.linalg.norm(( (x1, y1) - (x2, y2) ))
+    #     theta_ref = np.degrees(np.arctan2((y2-y1), (x2-x1)))
+
+    # def translation(self):
+    #     theta_p = 45
+    #     ab = np.array((-1,-1))
+    #     center = np.array((0,0))
+    #     rp = np.linalg.norm((center-ab))
+    #     theta_n = np.degrees(np.arctan2(ab[1], ab[0]))
+    #     theta_np = 180 + theta_ref + theta_p
+
+    #     a = Cx - (rp * np.cos(np.radians(theta_ref+theta_n)))
+    #     b = Cy - (rp * np.sin(np.radians(theta_ref+theta_n)))
+
+    #     ex_x = a + (np.cos(np.radians(theta_np)))
+    #     ex_y = b + (np.sin(np.radians(theta_np)))
+
+
     #### Update GPS object's x, y, and theta ####
     def get_robot_pose(self, c):
         gps = c.get_trackers_coordinates()
@@ -58,6 +90,7 @@ class GPS(object):
         a_arr.append(a[0:3])
         b_arr.append(b[0:3])
         self.tracker_to_xytheta(a[0],a[2],b[0],b[2])   # grab current pose of robot
+
 
     #### Calculate correct turn angle to face desired phi ####
     def calc_turn_angle(self, phi, robot, move_robot):
@@ -76,11 +109,19 @@ class GPS(object):
 
         move_robot.turn(a=turn_angle, bot=robot, smooth_stop=False)     # pass angle as degrees
 
+
     #### Rotate to correct angle ####
     def turn_to_angle(self, c, new_ang, robot, move_robot):
-        while (abs(self.theta-new_ang)>1):                              # feedback system to fix angle
+        angle_threshold = 0.5
+        while (abs(self.theta-new_ang) > angle_threshold):              # feedback system to fix angle
+            tic = time.monotonic() 
+            temp_ang = self.theta
             self.calc_turn_angle(new_ang, robot, move_robot)    
             self.get_robot_pose(c)
+            r = 0.05
+            self.w = (self.theta - temp_ang) / (time.monotonic() - tic)
+            self.v = self.w * r
+
 
     #### Calculate dest_angle robot needs to face to travel straight to destination ####
     def dest_angle(self, conv_x, conv_y, new_x, new_y):                 
@@ -90,8 +131,9 @@ class GPS(object):
             dest_ang = x - 360
         return dest_ang
 
+
     #### Move straight to destination ####
-    def move_to_dest(self, d, v=100, w=0, robot=None, c=None):          
+    def move_to_dest(self, d:'distance to move in mm', v=100, w=0, robot=None, c=None):          
         self.v = v  # in mm/sec
         self.w = w  # in ang/sec
         t = d/v     # time it takes to move d mm with v mm/sec
@@ -100,15 +142,24 @@ class GPS(object):
         vL = v - (wheelbase/2)*np.radians(w)
         vR = v + (wheelbase/2)*np.radians(w)
 
+        r = 0.05  # in m
         start = time.monotonic()        
         while (time.monotonic() < start + t):
+            p1 = np.array((self.x, self.y))
+            tic = time.monotonic()                                                          # time from previous position
             robot.drive_direct(int(np.round(vL)) ,int(np.round(vR)))
             self.get_robot_pose(c)
-
+            p2 = np.array((self.x, self.y))
+            self.v = (np.linalg.norm(p2-p1)/(time.monotonic()-tic))*1000
+            self.w = (r * ((np.linalg.norm(p2-p1))/(time.monotonic()-tic))) / (np.power(r,2))
+        
         robot.drive_direct(0,0)
+
 
     #### Main function to use to travel robot to a specific coordinate ####
     def travel(self, robot, c, new_x:'x-coordinate in m', new_y:'y-coordinate in m', new_ang:'final angle (in degrees), range: -180<x<+180'):
+        self.get_robot_pose(c)
+
         # Convert desired xy from m to mm
         new_x = new_x * 1000
         new_y = new_y * 1000
@@ -125,8 +176,8 @@ class GPS(object):
         print("Moving to target location: (" , new_x , "," , new_y , ") with final angle: ", new_ang)
         
         # 3. repeat steps 1 and 2 if needed
-        threshold = 15      # difference between desired coordinate and measured coordinate that is acceptable
-        while (abs(new_x - (self.x*1000)) >= threshold or abs(new_y - (self.y*1000)) >= threshold):
+        lin_threshold = 13      # difference between desired coordinate and measured coordinate that is acceptable
+        while (abs(new_x - (self.x*1000)) >= lin_threshold or abs(new_y - (self.y*1000)) >= lin_threshold):
             # Get current robot's coordinates in mm
             self.get_robot_pose(c)
             conv_x = self.x * 1000
@@ -140,16 +191,14 @@ class GPS(object):
 
             # 2. move to destination
             print("Moving towards destination... \n")
-            dist = np.linalg.norm(p2-p1)
+            dist = np.linalg.norm(p2-p1)                    # in mm
             self.move_to_dest(d=dist, robot=robot, c=c)
-
-            print("X difference: ", abs(new_x-(self.x*1000)), " Y difference: ", abs(new_y-(self.y*1000)))
-            print("Distance traveled: ", dist, "\n")
 
         # 4. rotate to final angle at destination
         print("Rotate at destination...")
         self.turn_to_angle(c, new_ang, robot, move_robot)
 
         # write gps data to text file
-        self.output_gps_coords()
+        # out_arr = np.vstack((a_arr,b_arr))
+        # self.output_arr(arr=out_arr)
         
