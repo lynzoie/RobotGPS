@@ -1,3 +1,4 @@
+from hashlib import new
 import numpy as np
 import os
 import time 
@@ -9,18 +10,18 @@ a_arr = []
 b_arr = []
 
 
-
 class GPS(object):
     def __init__(self):
-        self.x = 0          # x center of robot in m
-        self.y = 0          # y center of robot in m
+        self.x = 0          # x-center of robot in m
+        self.y = 0          # y-center of robot in m
         self.theta = 0      # angle from x-axis that robot is facing in degrees, -180 < self.theta < +180
         
         self.v = 0          # linear velocity in mm/sec, optional attribute
         self.w = 0          # angular velocity in rad/s, opitional attribute
 
-        self.Cx = 0         # x center between the two wheels in m, optional attribute
-        self.Cy = 0         # y center between the two wheels in m, optional attribute
+        self.center_x = 0   # x-center between trackers 3 and 4, creating reference x-axis in m
+        self.center_y = 0   # y-center between trackers 3 and 4, creating reference y-axis in m
+        self.ref_angle = 0  # angle of new reference axes in relation to SteamVR axes
 
 
     #### Write arr to filename ####
@@ -45,41 +46,13 @@ class GPS(object):
         By = z2
 
         self.theta = self.calc_theta(Ax, Ay, Bx, By)
-        self.Cx = ((Bx - Ax) / 2) + Ax
-        self.Cy = ((By - Ay) / 2) + Ay
+        Cx = ((Bx - Ax) / 2) + Ax
+        Cy = ((By - Ay) / 2) + Ay
 
         r = 0.05        # assuming the center of the robot is exactly 50mm from the wheel axis
         # offset to circle at center Cx,Cy
-        self.x = self.Cx - (r*np.cos(np.radians(self.theta)))
-        self.y = self.Cy - (r*np.sin(np.radians(self.theta)))
-
-
-    # #### Find reference axes and angle ####
-    # def ref_axes(self, c):
-    #     gps = c.get_trackers_coordinates()
-    #     c = list(gps['tracker_3'])
-    #     d = list(gps['tracker_4'])
-    #     x1, y1 = c[0], c[2]
-    #     x2, y2 = d[0], d[2]
-    #     Cy = (y2 - y1)/2 + y1
-    #     Cx = (x2 - x1)/2 + x1
-
-    #     r = np.linalg.norm(( (x1, y1) - (x2, y2) ))
-    #     theta_ref = np.degrees(np.arctan2((y2-y1), (x2-x1)))
-
-    # def translation(self):
-    #     theta_p = 45
-    #     ab = np.array((-1,-1))
-    #     center = np.array((0,0))
-    #     rp = np.linalg.norm((center-ab))
-    #     theta_n = np.degrees(np.arctan2(ab[1], ab[0]))
-    #     theta_np = 180 + theta_ref + theta_p
-
-    #     a = Cx - (rp * np.cos(np.radians(theta_ref+theta_n)))
-    #     b = Cy - (rp * np.sin(np.radians(theta_ref+theta_n)))
-
-    #     ex_x = a + (np.cos(np.radians(theta_np)))
-    #     ex_y = b + (np.sin(np.radians(theta_np)))
+        self.x = Cx - (r*np.cos(np.radians(self.theta)))
+        self.y = Cy - (r*np.sin(np.radians(self.theta)))
 
 
     #### Update GPS object's x, y, and theta ####
@@ -90,6 +63,37 @@ class GPS(object):
         a_arr.append(a[0:3])
         b_arr.append(b[0:3])
         self.tracker_to_xytheta(a[0],a[2],b[0],b[2])   # grab current pose of robot
+
+
+    #### Find reference axes and angle ####
+    def ref_axes(self, client):
+        gps = client.get_trackers_coordinates()
+        c = list(gps['tracker_3'])
+        d = list(gps['tracker_4'])
+        x1, y1 = c[0], c[2]
+        x2, y2 = d[0], d[2]
+        self.center_y = (y2 - y1)/2 + y1
+        self.center_x = (x2 - x1)/2 + x1
+        self.ref_angle = np.degrees(np.arctan2((y2-y1), (x2-x1)))
+
+    #### Translate tracker coordinates from GPS in relation to new reference axes ####
+    def translation(self, new_x, new_y, new_ang):
+        orig_point = np.array((new_x, new_y))
+        center = np.array((0,0))
+        r = np.linalg.norm((center-orig_point))
+
+        theta_n = np.degrees(np.arctan2(new_y, new_x))                              # angle from x-axis to desired coordinates
+        trans_ang = 180 + self.ref_angle + new_ang                                  # translated new_ang in reference of GPS x-axis
+        if trans_ang > 180:
+            trans_ang = trans_ang - 360
+
+        center_x = self.center_x * 1000                                             # convert self.center_x from m to mm
+        center_y = self.center_y * 1000                                             # convert self.center_y from m to mm
+
+        trans_x = center_x - (r * np.cos(np.radians(self.ref_angle+theta_n)))  # x coordinate of desired point in relation to GPS axis 
+        trans_y = center_y - (r * np.sin(np.radians(self.ref_angle+theta_n)))  # y coordinate of desired point in relation to GPS axis
+
+        return trans_x, trans_y, trans_ang
 
 
     #### Calculate correct turn angle to face desired phi ####
@@ -106,7 +110,6 @@ class GPS(object):
             turn_angle = -(360 + turn_angle)
         else:
             turn_angle = -turn_angle
-
         move_robot.turn(a=turn_angle, bot=robot, smooth_stop=False)     # pass angle as degrees
 
 
@@ -114,9 +117,9 @@ class GPS(object):
     def turn_to_angle(self, c, new_ang, robot, move_robot):
         angle_threshold = 0.5
         while (abs(self.theta-new_ang) > angle_threshold):              # feedback system to fix angle
-            tic = time.monotonic() 
+            tic = time.monotonic()
             temp_ang = self.theta
-            self.calc_turn_angle(new_ang, robot, move_robot)    
+            self.calc_turn_angle(new_ang, robot, move_robot)
             self.get_robot_pose(c)
             r = 0.05
             self.w = (self.theta - temp_ang) / (time.monotonic() - tic)
@@ -157,15 +160,25 @@ class GPS(object):
 
 
     #### Main function to use to travel robot to a specific coordinate ####
-    def travel(self, robot, c, new_x:'x-coordinate in m', new_y:'y-coordinate in m', new_ang:'final angle (in degrees), range: -180<x<+180'):
-        self.get_robot_pose(c)
+    def travel(self, robot, c, des_x:'x-coordinate in m', des_y:'y-coordinate in m', des_ang:'final angle (in degrees), range: -180<x<+180'): 
+        move_robot = Motion.RobotTranslator(robot)
+        self.get_robot_pose(c)      # get coordinates of robot if not taken already
 
         # Convert desired xy from m to mm
-        new_x = new_x * 1000
-        new_y = new_y * 1000
-        p2 = np.array((new_x, new_y))
+        des_x = des_x * 1000
+        des_y = des_y * 1000
+        
+        other_trackers = True
+        if other_trackers:
+            self.ref_axes(c)            # calculate reference axes in relation to trackers 3 and 4
+            print("New center: ", self.center_x, self.center_y, "Reference angle: ", self.ref_angle)
+            new_x, new_y, new_ang = self.translation(des_x, des_y, des_ang)
+        else:
+            new_x = des_x
+            new_y = des_y
+            new_ang = des_ang
 
-        move_robot = Motion.RobotTranslator(robot)
+        p2 = np.array((new_x, new_y))
 
         #### STEPS TO GET TO DESTINATION ####
         # 1. First, have robot face destination
@@ -173,7 +186,7 @@ class GPS(object):
         # 3. Check if we're at destination, else restart steps 1 and 2
         # 4. Once at destination (or close enough within threshold), rotate robot to final angle
         
-        print("Moving to target location: (" , new_x , "," , new_y , ") with final angle: ", new_ang)
+        print("Moving to target location: (" , des_x , "," , des_y , ") with final angle: ", des_ang)
         
         # 3. repeat steps 1 and 2 if needed
         lin_threshold = 13      # difference between desired coordinate and measured coordinate that is acceptable
@@ -181,23 +194,20 @@ class GPS(object):
             # Get current robot's coordinates in mm
             self.get_robot_pose(c)
             conv_x = self.x * 1000
-            conv_y = self.y * 1000       
+            conv_y = self.y * 1000
             p1 = np.array((conv_x, conv_y))
 
-            # 1. rotate to destination
-            print("Rotating to face destination... \n")
+            # 1. rotate to destination)
             dest_ang = self.dest_angle(conv_x, conv_y, new_x, new_y)
             self.turn_to_angle(c, dest_ang, robot, move_robot)
 
             # 2. move to destination
-            print("Moving towards destination... \n")
             dist = np.linalg.norm(p2-p1)                    # in mm
             self.move_to_dest(d=dist, robot=robot, c=c)
-
+        
         # 4. rotate to final angle at destination
-        print("Rotate at destination...")
         self.turn_to_angle(c, new_ang, robot, move_robot)
-
+        
         # write gps data to text file
         # out_arr = np.vstack((a_arr,b_arr))
         # self.output_arr(arr=out_arr)
