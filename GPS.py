@@ -206,7 +206,6 @@ class GPS(object):
             # 2. move to destination
             dist = np.linalg.norm(p2-p1)                    # in mm
             self.move_to_dest(d=dist, robot=robot, c=c)
-            print(self.x*1000-new_x, self.y*1000-new_y)
 
         # 4. rotate to final angle at destination
         self.turn_to_angle(c, new_ang, robot, move_robot)
