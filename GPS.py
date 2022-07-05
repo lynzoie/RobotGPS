@@ -52,8 +52,8 @@ class GPS(object):
 
         r = 0.05        # assuming the center of the robot is exactly 50mm from the wheel axis
         # offset to circle at center Cx,Cy
-        self.x = Cx - (r*np.cos(np.radians(self.theta)))
-        self.y = Cy - (r*np.sin(np.radians(self.theta)))
+        self.x = Cx + (r*np.cos(np.radians(self.theta)))
+        self.y = Cy + (r*np.sin(np.radians(self.theta)))
 
 
     #### Update GPS object's x, y, and theta ####
@@ -63,7 +63,7 @@ class GPS(object):
         b = list(gps['tracker_2'])
         a_arr.append(a[0:3])
         b_arr.append(b[0:3])
-        self.tracker_to_xytheta(a[0],a[2],b[0],b[2])   # grab current pose of robot
+        self.tracker_to_xytheta(-a[0],a[2],-b[0],b[2])   # grab current pose of robot
 
 
     #### Find reference axes and angle ####
