@@ -104,14 +104,12 @@ class GPS(object):
         conv_theta = np.where(self.theta >= 0, self.theta, 360+self.theta)       # convert negative angles to range 0<theta<360
         conv_phi = phi if phi >= 0 else 360+phi                                  # convert negative angles to range 0<phi<360
         turn_angle = conv_theta - conv_phi
-
         # turn angle<0 turns CCW and vice versa
         if (turn_angle > 180):
-            turn_angle = 360 - turn_angle
+            turn_angle = -(360 - turn_angle)
         elif (turn_angle < -180):
-            turn_angle = -(360 + turn_angle)
-        else:
-            turn_angle = -turn_angle
+            turn_angle = 360 + turn_angle
+        
         move_robot.turn(a=turn_angle, bot=robot, smooth_stop=False)     # pass angle as degrees
 
 
@@ -132,8 +130,6 @@ class GPS(object):
     def dest_angle(self, conv_x, conv_y, new_x, new_y):                 
         dest_ang = np.degrees(np.arctan2(new_y-conv_y, new_x-conv_x))
         x = dest_ang + 180 if dest_ang > 0 else (360+dest_ang) + 180
-        if x > 180:
-            dest_ang = x - 360
         return dest_ang
 
 
@@ -202,7 +198,7 @@ class GPS(object):
             # 1. rotate to destination)
             dest_ang = self.dest_angle(conv_x, conv_y, new_x, new_y)
             self.turn_to_angle(c, dest_ang, robot, move_robot)
-
+            
             # 2. move to destination
             dist = np.linalg.norm(p2-p1)                    # in mm
             self.move_to_dest(d=dist, robot=robot, c=c)
