@@ -10,6 +10,14 @@ a_arr = []
 b_arr = []
 
 
+def wrap_to_180(a):
+    if a > 180:
+        a -= 360
+    elif a< -180:
+        a += 360
+    return a
+
+
 class GPS(object):
     def __init__(self):
         self.x = 0          # x-center of robot in m
@@ -22,7 +30,8 @@ class GPS(object):
         self.center_x = 0   # x-center between trackers 3 and 4, creating reference x-axis in m
         self.center_y = 0   # y-center between trackers 3 and 4, creating reference y-axis in m
         self.ref_angle = 0  # angle of new reference axes in relation to SteamVR axes
-
+        
+        self.new_theta = 0  # target angle, optional attribute
 
     #### Write array to filename ####
     def output_arr(self, array, filename="test_navrobot.txt"):
@@ -58,6 +67,7 @@ class GPS(object):
 
     #### Update GPS object's x, y, and theta ####
     def get_robot_pose(self, c):
+        time.sleep(0.01)
         gps = c.get_trackers_coordinates()
         a = list(gps['tracker_1'])
         b = list(gps['tracker_2'])
@@ -99,7 +109,7 @@ class GPS(object):
 
 
     #### Calculate correct turn angle to face desired phi ####
-    def calc_turn_angle(self, phi, robot, move_robot):
+    def calc_turn_angle(self, phi, robot, move_robot, w=48.762365543/2, w_error=3.416):
         # Rotate to face destination
         conv_theta = np.where(self.theta >= 0, self.theta, 360+self.theta)       # convert negative angles to range 0<theta<360
         conv_phi = phi if phi >= 0 else 360+phi                                  # convert negative angles to range 0<phi<360
@@ -109,17 +119,23 @@ class GPS(object):
             turn_angle = -(360 - turn_angle)
         elif (turn_angle < -180):
             turn_angle = 360 + turn_angle
-        
-        move_robot.turn(a=turn_angle, bot=robot, smooth_stop=False)     # pass angle as degrees
+        # if turn_angle < 5: w_error = 0.0
+        move_robot.turn(a=turn_angle, bot=robot, smooth_stop=False, w=w, w_error=w_error)     # pass angle as degrees
 
 
     #### Rotate to correct angle ####
     def turn_to_angle(self, c, new_ang, robot, move_robot):
-        angle_threshold = 0.5
-        while (abs(self.theta-new_ang) > angle_threshold):              # feedback system to fix angle
+        angle_threshold = 0.2
+        while (abs(wrap_to_180(self.theta-new_ang)) > angle_threshold):              # feedback system to fix angle
             tic = time.monotonic()
             temp_ang = self.theta
-            self.calc_turn_angle(new_ang, robot, move_robot)
+            #if np.cos(np.radians(wrap_to_180(self.theta-new_ang))) < 0.8:
+            self.calc_turn_angle(new_ang, robot, move_robot, w=48.762365543/2, w_error=3.416)
+            #else:
+            #    omega = -15*np.cos(np.radians(wrap_to_180(self.theta-new_ang))) + 36
+            #    print("omega is here", self.theta, new_ang)
+            #    self.calc_turn_angle(new_ang, robot, move_robot, w=omega)
+            #    # self.calc_turn_angle(new_ang, robot, move_robot, w=48.762365543/4)
             self.get_robot_pose(c)
             r = 0.05
             self.w = (self.theta - temp_ang) / (time.monotonic() - tic)
@@ -177,7 +193,7 @@ class GPS(object):
             new_ang = des_ang
 
         p2 = np.array((new_x, new_y))
-
+        self.new_theta = new_ang
         #### STEPS TO GET TO DESTINATION ####
         # 1. First, have robot face destination
         # 2. Second, have the robot start moving forward to destination (move towards minimum distance between the two points)
@@ -188,7 +204,9 @@ class GPS(object):
         
         # 3. repeat steps 1 and 2 if needed
         lin_threshold = 10      # difference between desired coordinate and measured coordinate that is acceptable
-        while (abs(new_x - (self.x*1000)) >= lin_threshold or abs(new_y - (self.y*1000)) >= lin_threshold):
+
+        while np.sqrt( abs(new_x - (self.x*1000))**2+ abs(new_y - (self.y*1000))**2) >= lin_threshold:
+        # while (abs(new_x - (self.x*1000)) >= lin_threshold or abs(new_y - (self.y*1000)) >= lin_threshold):
             # Get current robot's coordinates in mm
             self.get_robot_pose(c)
             conv_x = self.x * 1000
@@ -196,14 +214,17 @@ class GPS(object):
             p1 = np.array((conv_x, conv_y))
 
             # 1. rotate to destination)
+            print("Rotate to face destination...")
             dest_ang = self.dest_angle(conv_x, conv_y, new_x, new_y)
             self.turn_to_angle(c, dest_ang, robot, move_robot)
             
             # 2. move to destination
+            print("Move forward to destination...")
             dist = np.linalg.norm(p2-p1)                    # in mm
             self.move_to_dest(d=dist, robot=robot, c=c)
 
         # 4. rotate to final angle at destination
+        print("Rotate to final angle...")
         self.turn_to_angle(c, new_ang, robot, move_robot)
         
         # write gps data to text file
