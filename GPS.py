@@ -71,6 +71,14 @@ class GPS(object):
         gps = c.get_trackers_coordinates()
         a = list(gps['tracker_1'])
         b = list(gps['tracker_2'])
+        # Failsafe in case tracker dies
+        while (a[0] == 0 and b[0] == 0):
+            gps = c.get_trackers_coordinates()
+            a = list(gps['tracker_1'])
+            b = list(gps['tracker_2'])
+            print("Please turn on tracker")
+            time.sleep(2)
+
         a_arr.append(a[0:3])
         b_arr.append(b[0:3])
         self.tracker_to_xytheta(-a[0],a[2],-b[0],b[2])   # grab current pose of robot
